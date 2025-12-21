@@ -4,6 +4,7 @@ const path    = require('path');
 const fs      = require('fs');
 
 const app = express();
+// Pour Render : prend PORT de l'environnement, sinon 3000 en local
 const PORT = process.env.PORT || 3000;
 
 // Dossier où seront stockés les logs
@@ -24,12 +25,13 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// Servir la page HTML dans /public
+// Servir la page HTML (formulaire)
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Rendre les logs accessibles en téléchargement
 app.use('/logs', express.static(path.join(__dirname, 'uploads')));
 
-
-// Route d'upload avec renommage
+// Route d'upload avec renommage + lien de DL
 app.post('/upload', upload.single('combatlog'), (req, res) => {
   if (!req.file) {
     return res.status(400).send('Aucun fichier reçu');
@@ -59,42 +61,5 @@ app.post('/upload', upload.single('combatlog'), (req, res) => {
     }
 
     const rawDate = parts[0].trim();   // 20251213-22:28:09:301
-    const player  = parts[8].trim();   // Tipeuz, Thealia, etc.
-    const boss    = parts[9].trim();   // Calanthia, autre boss
-
-    // Transformer la date pour le nom de fichier :
-    // 20251213-22:28:09:301 -> 20251213-222809
-    let dateForName = rawDate.replace(/:/g, '').slice(0, 8 + 1 + 6);
-
-    // Construire le nom : date_joueur_boss
-    let baseName = `${dateForName}_${player}_${boss}`;
-
-    // Nettoyer le nom de fichier pour Windows
-    baseName = baseName.replace(/[<>:"/\\|?*]/g, '_');
-
-    const newFilename = baseName + originalExt;
-    const newPath = path.join(path.dirname(filePath), newFilename);
-
-    // Renommer le fichier
-    fs.rename(filePath, newPath, (err2) => {
-  if (err2) {
-    console.error('Erreur renommage fichier :', err2);
-    return res.status(500).send('Erreur renommage fichier');
-  }
-
-  const downloadUrl = `/logs/${encodeURIComponent(newFilename)}`;
-  res.send(`
-    <p>Fichier renommé en : ${newFilename}</p>
-    <p><a href="${downloadUrl}">Télécharger le log renommé</a></p>
-  `);
-});
-
-
-      res.send('Fichier renommé en : ' + newFilename);
-    });
-  });
-});
-
-app.listen(PORT, () => {
-  console.log(`Serveur démarré sur http://localhost:${PORT}`);
-});
+    const player  = parts[8].trim();   // Tipeuz / Thealia ...
+    const boss    = parts[9].trim();   // Calanthia / autre
