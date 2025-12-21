@@ -32,119 +32,35 @@
       min-height: 20px;
       font-weight: bold;
     }
+    table {
+      margin-top: 25px;
+      border-collapse: collapse;
+      width: 90%;
+      max-width: 900px;
+      background-color: #151518;
+    }
+    th, td {
+      padding: 6px 10px;
+      text-align: center;
+    }
+    th {
+      background-color: #202024;
+    }
+    tr:nth-child(even) {
+      background-color: #1a1a1f;
+    }
+    tr.player-selected {
+      background-color: #3a2525;
+    }
   </style>
 </head>
 <body>
   <h1>Damage By Skill - Throne and Liberty</h1>
-  <p>Choisis un fichier combatlog (.txt) exporté du jeu.</p>
-  <input type="file" id="logFile" accept=".txt">
+  <p>Choisis un ou plusieurs fichiers combatlog (.txt) exportés du jeu.</p>
+  <input type="file" id="logFile" accept=".txt" multiple>
   <div id="status"></div>
 
-  <div id="chartContainer">
-    <canvas id="damageChart"></canvas>
-  </div>
-
-  <script>
-    const fileInput = document.getElementById('logFile');
-    const statusEl = document.getElementById('status');
-    let chart;
-
-    fileInput.addEventListener('change', () => {
-      const file = fileInput.files[0];
-      if (!file) return;
-      statusEl.textContent = 'Lecture du fichier...';
-
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          const text = reader.result;
-          const lines = text.split(/\r?\n/);
-
-          const damageBySkill = {};
-
-          for (const line of lines) {
-            if (!line) continue;
-            const parts = line.split(',');
-            if (parts.length < 5) continue;
-
-            // test plus souple sur le type d'événement
-            const type = (parts[1] || '').trim().toLowerCase();
-            if (!type.includes('damage')) continue;
-
-            const skillName = parts[2].trim();
-            const damageStr = parts[4].trim();
-            const damage = parseInt(damageStr, 10);
-            if (isNaN(damage) || damage <= 0) continue;
-
-            if (!damageBySkill[skillName]) {
-              damageBySkill[skillName] = 0;
-            }
-            damageBySkill[skillName] += damage;
-          }
-
-          const entries = Object.entries(damageBySkill);
-          if (entries.length === 0) {
-            statusEl.textContent = 'Aucune donnée DamageDone trouvée.';
-            return;
-          }
-
-          entries.sort((a, b) => b[1] - a[1]);
-
-          const labels = entries.map(e => e[0]);
-          const data = entries.map(e => e[1]);
-
-          statusEl.textContent = `Compétences trouvées : ${labels.length}`;
-
-          drawChart(labels, data);
-        } catch (e) {
-          statusEl.textContent = 'Erreur de parsing : ' + e.message;
-        }
-      };
-      reader.onerror = () => {
-        statusEl.textContent = 'Erreur de lecture du fichier.';
-      };
-      reader.readAsText(file);
-    });
-
-    function drawChart(labels, data) {
-      const ctx = document.getElementById('damageChart').getContext('2d');
-
-      if (chart) chart.destroy();
-
-      chart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: labels,
-          datasets: [{
-            label: 'Damage total',
-            data: data,
-            backgroundColor: 'rgba(88, 101, 242, 0.8)'
-          }]
-        },
-        options: {
-          indexAxis: 'y',
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            title: {
-              display: true,
-              text: 'Damage By Skill'
-            }
-          },
-          scales: {
-            x: {
-              ticks: { color: '#ffffff' },
-              grid: { color: 'rgba(255,255,255,0.1)' }
-            },
-            y: {
-              ticks: { color: '#ffffff' },
-              grid: { color: 'rgba(255,255,255,0.1)' }
-            }
-          }
-        }
-      });
-    }
-  </script>
-</body>
-</html>
+  <h2>Player Statistics</h2>
+  <table>
+    <thead>
+      <tr>
