@@ -12,7 +12,7 @@
       align-items: center;          /* centre verticalement */
       font-family: Arial, sans-serif;
 
-      /* IMAGE DE FOND (dans public/images/...) */
+      /* IMAGE DE FOND (public/Images/...) */
       background-image: url('/Images/Throne-and-Liberty-Wallpaper-16-3840x2160.jpg');
       background-size: cover;
       background-position: center;
@@ -21,10 +21,11 @@
 
     .container {
       text-align: center;
-      background-color: rgba(0, 0, 0, 0.6); /* fond sombre transparent pour lire le texte */
+      background-color: rgba(0, 0, 0, 0.6); /* fond sombre transparent */
       padding: 30px 40px;
       border-radius: 8px;
       color: white;
+      max-width: 600px;
     }
 
     h1 {
@@ -36,15 +37,49 @@
       padding: 6px 14px;
       cursor: pointer;
     }
+
+    .logs-path {
+      margin-top: 20px;
+      font-size: 14px;
+    }
+
+    .logs-path code {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 3px 6px;
+      border-radius: 4px;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Uploader un log Throne and Liberty</h1>
+
     <form action="/upload" method="post" enctype="multipart/form-data">
       <input type="file" name="combatlog" accept=".txt" required />
       <button type="submit">Envoyer le log</button>
     </form>
+
+    <div class="logs-path">
+      <p>Dossier des logs sur votre PC :</p>
+      <p>
+        <code id="logPath">%LOCALAPPDATA%\TL\SAVED\COMBATLOGS</code>
+      </p>
+      <button type="button" onclick="copyPath()">Copier le chemin</button>
+      <p id="copyMsg"></p>
+    </div>
   </div>
+
+  <script>
+    function copyPath() {
+      const text = document.getElementById('logPath').textContent;
+      navigator.clipboard.writeText(text)
+        .then(() => {
+          document.getElementById('copyMsg').textContent = 'Chemin copié dans le presse-papiers.';
+        })
+        .catch(() => {
+          document.getElementById('copyMsg').textContent = 'Impossible de copier automatiquement, copiez le texte à la main.';
+        });
+    }
+  </script>
 </body>
 </html>
