@@ -18,26 +18,50 @@
       padding: 20px;
     }
     h1 { margin-bottom: 10px; }
-    #chartContainer, #timelineContainer {
-      width: 90%;
-      max-width: 1200px;
-      height: 400px;
-      margin-top: 30px;
-    }
-    input[type="file"] {
-      margin-top: 15px;
-    }
+    input[type="file"] { margin-top: 15px; }
     #status {
       margin-top: 10px;
       min-height: 20px;
       font-weight: bold;
     }
+
+    /* Cartes de résumé */
+    .summary {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+      width: 90%;
+      max-width: 1200px;
+    }
+    .card {
+      flex: 1;
+      background: #11121a;
+      border-radius: 8px;
+      padding: 8px 12px;
+      box-shadow: 0 0 14px rgba(0,0,0,0.55);
+      border: 1px solid #23233a;
+    }
+    .card-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      color: #9b9bc0;
+    }
+    .card-value {
+      margin-top: 4px;
+      font-size: 18px;
+      font-weight: 700;
+      color: #ff4d6a;
+    }
+
+    /* Tableau joueurs */
     table {
       margin-top: 25px;
       border-collapse: collapse;
       width: 90%;
       max-width: 900px;
       background-color: #151518;
+      border-radius: 8px;
+      overflow: hidden;
     }
     th, td {
       padding: 6px 10px;
@@ -49,8 +73,63 @@
     tr:nth-child(even) {
       background-color: #1a1a1f;
     }
+    tbody tr:hover {
+      background-color: #262533;
+      cursor: pointer;
+    }
     tr.player-selected {
       background-color: #3a2525;
+    }
+    td:nth-child(2) { /* Player Name */
+      text-align: left;
+    }
+    td {
+      font-size: 13px;
+      color: #e0e0f5;
+    }
+    td:nth-child(4),
+    td:nth-child(5),
+    td:nth-child(6),
+    td:nth-child(7),
+    td:nth-child(8) {
+      color: #b8b8d5;
+    }
+
+    /* Panneaux pour les graphes */
+    .panel {
+      width: 90%;
+      max-width: 1200px;
+      margin-top: 20px;
+      background: #101018;
+      border-radius: 10px;
+      padding: 10px 14px 14px;
+      box-shadow: 0 0 18px rgba(0,0,0,0.6);
+      border: 1px solid #222235;
+    }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .panel-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #e5e5ff;
+    }
+    .panel-meta {
+      font-size: 11px;
+      color: #9a9ac2;
+    }
+    .panel-body {
+      height: 260px;
+    }
+
+    #chartContainer, #timelineContainer {
+      width: 100%;
+      max-width: none;
+      height: 100%;
+      margin-top: 0;
     }
   </style>
 </head>
@@ -59,6 +138,22 @@
   <p>Choisis un ou plusieurs fichiers combatlog (.txt) exportés du jeu.</p>
   <input type="file" id="logFile" accept=".txt" multiple>
   <div id="status"></div>
+
+  <!-- Cartes de résumé -->
+  <div class="summary">
+    <div class="card">
+      <div class="card-title">Total Damage</div>
+      <div class="card-value" id="sumTotalDamage">0</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Average DPS</div>
+      <div class="card-value" id="sumAvgDps">0</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Players</div>
+      <div class="card-value" id="sumPlayers">0</div>
+    </div>
+  </div>
 
   <h2>Player Statistics</h2>
   <p>Clique sur un ou plusieurs joueurs pour les comparer sur les graphiques.</p>
@@ -79,14 +174,26 @@
     <tbody id="playerBody"></tbody>
   </table>
 
-  <h2>DPS Timeline</h2>
-  <div id="timelineContainer">
-    <canvas id="dpsTimeline"></canvas>
+  <!-- Panel DPS Timeline -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">DPS Timeline</span>
+      <span class="panel-meta" id="fightDurationMeta"></span>
+    </div>
+    <div class="panel-body" id="timelineContainer">
+      <canvas id="dpsTimeline"></canvas>
+    </div>
   </div>
 
-  <h2>Damage By Skill</h2>
-  <div id="chartContainer">
-    <canvas id="damageChart"></canvas>
+  <!-- Panel Damage By Skill -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Damage By Skill</span>
+      <span class="panel-meta" id="playersMeta"></span>
+    </div>
+    <div class="panel-body" id="chartContainer">
+      <canvas id="damageChart"></canvas>
+    </div>
   </div>
 
   <script>
@@ -116,6 +223,16 @@
             return;
           }
           playersData.sort((a, b) => b.dps - a.dps);
+
+          // cartes résumé
+          const totalFightDamage = playersData.reduce((s, p) => s + p.totalDamage, 0);
+          const avgDps = playersData.reduce((s, p) => s + p.dps, 0) / playersData.length;
+          document.getElementById('sumTotalDamage').textContent =
+            totalFightDamage.toLocaleString('fr-FR');
+          document.getElementById('sumAvgDps').textContent =
+            Math.round(avgDps).toLocaleString('fr-FR');
+          document.getElementById('sumPlayers').textContent = playersData.length;
+
           renderPlayerTable(playersData);
           statusEl.textContent = `Logs analysés : ${playersData.length}`;
 
@@ -256,17 +373,13 @@
 
     function renderPlayerTable(players) {
       playerBody.innerHTML = '';
-
       const totalFightDamage = players.reduce((sum, p) => sum + p.totalDamage, 0);
 
       players.forEach((p, idx) => {
         const tr = document.createElement('tr');
         tr.dataset.index = p.index;
-
         const percent =
-          totalFightDamage > 0
-            ? (p.totalDamage / totalFightDamage) * 100
-            : 0;
+          totalFightDamage > 0 ? (p.totalDamage / totalFightDamage) * 100 : 0;
 
         tr.innerHTML = `
           <td>${idx + 1}</td>
@@ -279,6 +392,9 @@
           <td>${p.maxHit.toLocaleString('fr-FR')}</td>
           <td>${p.duration}s</td>
         `;
+        if (idx === 0) {
+          tr.style.borderLeft = '3px solid #ff4d6a';
+        }
         tr.addEventListener('click', () => {
           onPlayerRowClick(p);
         });
@@ -291,7 +407,7 @@
       if (exists) {
         selectedPlayers = selectedPlayers.filter(p => p.index !== player.index);
       } else {
-        selectedPlayers.push(player); // aucune limite pratique
+        selectedPlayers.push(player);
       }
       highlightSelectedRows();
       drawComparisonChart();
@@ -310,8 +426,12 @@
     function drawComparisonChart() {
       const ctx = document.getElementById('damageChart').getContext('2d');
       if (chart) chart.destroy();
+      const playersMeta = document.getElementById('playersMeta');
 
-      if (!selectedPlayers.length) return;
+      if (!selectedPlayers.length) {
+        playersMeta.textContent = '';
+        return;
+      }
 
       const skillTotals = {};
       selectedPlayers.forEach(p => {
@@ -357,6 +477,10 @@
         };
       });
 
+      playersMeta.textContent = selectedPlayers.length === 1
+        ? selectedPlayers[0].playerName
+        : selectedPlayers.map(p => p.playerName).join(' vs ');
+
       chart = new Chart(ctx, {
         type: 'bar',
         data: { labels, datasets },
@@ -367,10 +491,7 @@
           plugins: {
             legend: { display: true },
             title: {
-              display: true,
-              text: selectedPlayers.length === 1
-                ? `Damage By Skill - ${selectedPlayers[0].playerName}`
-                : `Comparaison Damage By Skill : ${selectedPlayers.map(p => p.playerName).join(' vs ')}`
+              display: false
             }
           },
           scales: {
@@ -390,9 +511,15 @@
     function drawDpsTimeline() {
       const ctx = document.getElementById('dpsTimeline').getContext('2d');
       if (dpsTimelineChart) dpsTimelineChart.destroy();
-      if (!selectedPlayers.length) return;
+      const fightMeta = document.getElementById('fightDurationMeta');
+      if (!selectedPlayers.length) {
+        fightMeta.textContent = '';
+        return;
+      }
 
       const maxDuration = Math.max(...selectedPlayers.map(p => p.duration));
+      fightMeta.textContent = `${maxDuration}s`;
+
       const labels = [];
       for (let s = 0; s <= maxDuration; s++) {
         labels.push(`${s}s`);
@@ -436,10 +563,7 @@
           maintainAspectRatio: false,
           plugins: {
             legend: { display: true },
-            title: {
-              display: true,
-              text: 'DPS Timeline'
-            },
+            title: { display: false },
             tooltip: {
               callbacks: {
                 label: (ctx) => {
