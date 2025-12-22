@@ -68,32 +68,14 @@
       text-align: center;
       font-size: 14px;
     }
-    th {
-      background-color: #202024;
-    }
-    tr:nth-child(even) {
-      background-color: #1a1a1f;
-    }
+    th { background-color: #202024; }
+    tr:nth-child(even) { background-color: #1a1a1f; }
     tbody tr:hover {
       background-color: #262533;
       cursor: pointer;
     }
-    tr.player-selected {
-      background-color: #3a2525;
-    }
-    td:nth-child(2) { /* Player Name */
-      text-align: left;
-    }
-    td {
-      color: #e0e0f5;
-    }
-    td:nth-child(4),
-    td:nth-child(5),
-    td:nth-child(6),
-    td:nth-child(7),
-    td:nth-child(8) {
-      color: #b8b8d5;
-    }
+    tr.player-selected { background-color: #3a2525; }
+    td:nth-child(2) { text-align: left; }
 
     /* Panneaux pour les graphes */
     .panel {
@@ -122,14 +104,20 @@
       color: #9a9ac2;
     }
     .panel-body {
-      height: 420px; /* hauteur augmentée pour des graphes lisibles */
+      height: 420px;
     }
 
     #chartContainer, #timelineContainer {
       width: 100%;
-      max-width: none;
       height: 100%;
-      margin-top: 0;
+    }
+
+    /* Canvases : prennent toute la hauteur du parent */
+    #dpsTimeline,
+    #damageChart {
+      width: 100% !important;
+      height: 100% !important;
+      max-height: none !important;
     }
   </style>
 </head>
@@ -299,7 +287,6 @@
             }
 
             if (hitCount === 0 || !firstTs || !lastTs) {
-              console.log('Aucun hit dans ce fichier :', file.name);
               resolve(null);
               return;
             }
@@ -321,15 +308,11 @@
               damageBySkill,
               damageTimeline
             });
-          } catch (e) {
-            console.error('Erreur parsing fichier', file.name, e);
+          } catch {
             resolve(null);
           }
         };
-        reader.onerror = () => {
-          console.error('Erreur lecture fichier', file.name);
-          resolve(null);
-        };
+        reader.onerror = () => resolve(null);
         reader.readAsText(file);
       });
     }
@@ -391,12 +374,8 @@
           <td>${p.maxHit.toLocaleString('fr-FR')}</td>
           <td>${p.duration}s</td>
         `;
-        if (idx === 0) {
-          tr.style.borderLeft = '3px solid #ff4d6a';
-        }
-        tr.addEventListener('click', () => {
-          onPlayerRowClick(p);
-        });
+        if (idx === 0) tr.style.borderLeft = '3px solid #ff4d6a';
+        tr.addEventListener('click', () => onPlayerRowClick(p));
         playerBody.appendChild(tr);
       });
     }
@@ -480,6 +459,15 @@
         ? selectedPlayers[0].playerName
         : selectedPlayers.map(p => p.playerName).join(' vs ');
 
+      /* --- hauteur dynamique du panel en fonction du nombre de skills --- */
+      const baseHeight = 260;      // hauteur pour ~10 skills
+      const perSkill = 20;         // +20px par skill au-dessus de 10
+      const extra = Math.max(0, labels.length - 10);
+      const newHeight = baseHeight + extra * perSkill;
+      const panelBody = document.getElementById('chartContainer');
+      panelBody.style.height = newHeight + 'px';
+      /* ------------------------------------------------------------------ */
+
       chart = new Chart(ctx, {
         type: 'bar',
         data: { labels, datasets },
@@ -518,9 +506,7 @@
       fightMeta.textContent = `${maxDuration}s`;
 
       const labels = [];
-      for (let s = 0; s <= maxDuration; s++) {
-        labels.push(`${s}s`);
-      }
+      for (let s = 0; s <= maxDuration; s++) labels.push(`${s}s`);
 
       const colors = [
         'rgba(255, 99, 132, 1)',
