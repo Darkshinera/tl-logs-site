@@ -268,65 +268,73 @@
     }
 
     function drawComparisonChart() {
-      const ctx = document.getElementById('damageChart').getContext('2d');
-      if (chart) chart.destroy();
+  const ctx = document.getElementById('damageChart').getContext('2d');
+  if (chart) chart.destroy();
 
-      if (!selectedPlayers.length) return;
+  if (!selectedPlayers.length) return;
 
-      // Construire la liste de toutes les compétences présentes chez les joueurs sélectionnés
-      const skillSet = new Set();
-      selectedPlayers.forEach(p => {
-        Object.keys(p.damageBySkill).forEach(skill => skillSet.add(skill));
-      });
-      const labels = Array.from(skillSet);
+  // 1) Construire la liste de toutes les compétences
+  const skillTotals = {}; // { skillName: totalDamageAcrossSelectedPlayers }
 
-      // Créer un dataset par joueur sélectionné
-      const colors = ['rgba(88, 101, 242, 0.8)', 'rgba(46, 204, 113, 0.8)'];
-      const borderColors = ['rgba(88, 101, 242, 1)', 'rgba(46, 204, 113, 1)'];
+  selectedPlayers.forEach(p => {
+    Object.entries(p.damageBySkill).forEach(([skill, dmg]) => {
+      if (!skillTotals[skill]) skillTotals[skill] = 0;
+      skillTotals[skill] += dmg;
+    });
+  });
 
-      const datasets = selectedPlayers.map((p, idx) => {
-        const data = labels.map(skill => p.damageBySkill[skill] || 0);
-        return {
-          label: p.playerName,
-          data,
-          backgroundColor: colors[idx % colors.length],
-          borderColor: borderColors[idx % borderColors.length],
-          borderWidth: 1
-        };
-      });
+  // 2) Trier les compétences par dégâts totaux décroissants
+  const sortedSkills = Object.entries(skillTotals)
+    .sort((a, b) => b[1] - a[1])   // tri par total desc
+    .map(e => e[0]);               // garder seulement le nom
 
-      chart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels,
-          datasets
-        },
-        options: {
-          indexAxis: 'y',
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: true },
-            title: {
-              display: true,
-              text: selectedPlayers.length === 1
-                ? `Damage By Skill - ${selectedPlayers[0].playerName}`
-                : `Comparaison Damage By Skill : ${selectedPlayers.map(p => p.playerName).join(' vs ')}`
-            }
-          },
-          scales: {
-            x: {
-              ticks: { color: '#ffffff' },
-              grid: { color: 'rgba(255,255,255,0.1)' }
-            },
-            y: {
-              ticks: { color: '#ffffff' },
-              grid: { color: 'rgba(255,255,255,0.1)' }
-            }
-          }
+  const labels = sortedSkills;
+
+  // 3) Créer un dataset par joueur dans cet ordre de skills
+  const colors = ['rgba(88, 101, 242, 0.8)', 'rgba(46, 204, 113, 0.8)'];
+  const borderColors = ['rgba(88, 101, 242, 1)', 'rgba(46, 204, 113, 1)'];
+
+  const datasets = selectedPlayers.map((p, idx) => {
+    const data = labels.map(skill => p.damageBySkill[skill] || 0);
+    return {
+      label: p.playerName,
+      data,
+      backgroundColor: colors[idx % colors.length],
+      borderColor: borderColors[idx % borderColors.length],
+      borderWidth: 1
+    };
+  });
+
+  chart = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true },
+        title: {
+          display: true,
+          text: selectedPlayers.length === 1
+            ? `Damage By Skill - ${selectedPlayers[0].playerName}`
+            : `Comparaison Damage By Skill : ${selectedPlayers.map(p => p.playerName).join(' vs ')}`
         }
-      });
+      },
+      scales: {
+        x: {
+          ticks: { color: '#ffffff' },
+          grid: { color: 'rgba(255,255,255,0.1)' }
+        },
+        y: {
+          ticks: { color: '#ffffff' },
+          grid: { color: 'rgba(255,255,255,0.1)' }
+        }
+      }
     }
+  });
+}
+
   </script>
 </body>
 </html>
