@@ -2,7 +2,8 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Damage Analyse - Throne and Liberty</title>
+  <title>Analyse log TL - Damage by Skill</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
       margin: 0;
@@ -17,47 +18,44 @@
       padding: 20px;
     }
     h1 { margin-bottom: 10px; }
-    input[type="file"] { margin-top: 15px; }
+    #chartContainer {
+      width: 90%;
+      max-width: 1200px;
+      height: 600px;
+      margin-top: 30px;
+    }
+    input[type="file"] {
+      margin-top: 15px;
+    }
     #status {
       margin-top: 10px;
       min-height: 20px;
       font-weight: bold;
     }
     table {
-      margin-top: 20px;
+      margin-top: 25px;
       border-collapse: collapse;
-      width: 95%;
-      max-width: 1200px;
+      width: 90%;
+      max-width: 900px;
       background-color: #151518;
-      font-size: 13px;
     }
     th, td {
       padding: 6px 10px;
       text-align: center;
-      border-bottom: 1px solid #1f1f23;
     }
     th {
       background-color: #202024;
-      font-weight: bold;
     }
-    tr:nth-child(even) { background-color: #1a1a1f; }
-    tr.player-selected { background-color: #3a2525; }
-    tr.skill-top { background-color: #252f1f; }
-    td.skill-name {
-      text-align: left;
-      display: flex;
-      align-items: center;
-      gap: 6px;
+    tr:nth-child(even) {
+      background-color: #1a1a1f;
     }
-    td.skill-name img {
-      width: 20px;
-      height: 20px;
-      border-radius: 3px;
+    tr.player-selected {
+      background-color: #3a2525;
     }
   </style>
 </head>
 <body>
-  <h1>Damage Analyse - Throne and Liberty</h1>
+  <h1>Damage By Skill - Throne and Liberty</h1>
   <p>Choisis un ou plusieurs fichiers combatlog (.txt) exportés du jeu.</p>
   <input type="file" id="logFile" accept=".txt" multiple>
   <div id="status"></div>
@@ -68,56 +66,39 @@
       <tr>
         <th>#</th>
         <th>Player Name</th>
-        <th>Total Damage</th>
         <th>DPS</th>
+        <th>Total Damage</th>
         <th>Hit Count</th>
         <th>Avg Hit</th>
         <th>Max Hit</th>
         <th>Duration</th>
-        <th>Boss</th>
       </tr>
     </thead>
     <tbody id="playerBody"></tbody>
   </table>
 
-  <h2>Skill Details (joueur sélectionné)</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>#</th>
-        <th>Skill</th>
-        <th>Dégâts</th>
-        <th>Ratio</th>
-        <th>Coups</th>
-        <th>Max Hit</th>
-        <th>DPS skill</th>
-      </tr>
-    </thead>
-    <tbody id="skillBody"></tbody>
-  </table>
+  <div id="chartContainer">
+    <canvas id="damageChart"></canvas>
+  </div>
 
   <script>
-    console.log('analyse2 script chargé');
-
     const fileInput = document.getElementById('logFile');
     const statusEl = document.getElementById('status');
     const playerBody = document.getElementById('playerBody');
-    const skillBody = document.getElementById('skillBody');
+    let chart;
     let playersData = [];
 
     fileInput.addEventListener('change', () => {
-      console.log('change event, fichiers:', fileInput.files.length);
       const files = Array.from(fileInput.files);
       if (!files.length) return;
       statusEl.textContent = 'Lecture des fichiers...';
       playersData = [];
       playerBody.innerHTML = '';
-      skillBody.innerHTML = '';
+      if (chart) chart.destroy();
 
       Promise.all(files.map((f, index) => parseLogFile(f, index)))
         .then(results => {
           playersData = results.filter(r => r !== null);
-          console.log('playersData', playersData);
           if (!playersData.length) {
             statusEl.textContent = 'Aucune donnée valide trouvée dans les logs.';
             return;
@@ -125,7 +106,7 @@
           playersData.sort((a, b) => b.dps - a.dps);
           renderPlayerTable(playersData);
           statusEl.textContent = `Logs analysés : ${playersData.length}`;
-          renderSkillTable(playersData[0]);
+          drawSkillChart(playersData[0]);
         })
         .catch(err => {
           statusEl.textContent = 'Erreur : ' + err;
@@ -140,7 +121,7 @@
             const text = reader.result;
             const lines = text.split(/\r?\n/);
 
-            const skills = {};
+            const damageBySkill = {};
             let totalDamage = 0;
             let hitCount = 0;
             let maxHit = 0;
@@ -169,14 +150,8 @@
                 hitCount += 1;
                 if (dmg > maxHit) maxHit = dmg;
 
-                if (!skills[skillName]) {
-                  skills[skillName] = { total: 0, hits: 0, maxHit: 0 };
-                }
-                skills[skillName].total += dmg;
-                skills[skillName].hits += 1;
-                if (dmg > skills[skillName].maxHit) {
-                  skills[skillName].maxHit = dmg;
-                }
+                if (!damageBySkill[skillName]) damageBySkill[skillName] = 0;
+                damageBySkill[skillName] += dmg;
               }
 
               if (!firstTs) firstTs = ts;
@@ -205,7 +180,7 @@
               avgHit,
               duration,
               dps,
-              skills
+              damageBySkill
             });
           } catch (e) {
             console.error('Erreur parsing fichier', file.name, e);
@@ -245,16 +220,69 @@
         tr.innerHTML = `
           <td>${idx + 1}</td>
           <td>${p.playerName}</td>
-          <td>${p.totalDamage.toLocaleString('fr-FR')}</td>
           <td>${p.dps.toLocaleString('fr-FR')}</td>
+          <td>${p.totalDamage.toLocaleString('fr-FR')}</td>
           <td>${p.hitCount.toLocaleString('fr-FR')}</td>
           <td>${p.avgHit.toLocaleString('fr-FR')}</td>
           <td>${p.maxHit.toLocaleString('fr-FR')}</td>
           <td>${p.duration}s</td>
-          <td>${p.bossName}</td>
         `;
         tr.addEventListener('click', () => {
           document
             .querySelectorAll('#playerBody tr')
             .forEach(row => row.classList.remove('player-selected'));
           tr.classList.add('player-selected');
+          drawSkillChart(p);
+        });
+        if (idx === 0) tr.classList.add('player-selected');
+        playerBody.appendChild(tr);
+      });
+    }
+
+    function drawSkillChart(player) {
+      const entries = Object.entries(player.damageBySkill);
+      entries.sort((a, b) => b[1] - a[1]);
+
+      const labels = entries.map(e => e[0]);
+      const data = entries.map(e => e[1]);
+
+      const ctx = document.getElementById('damageChart').getContext('2d');
+      if (chart) chart.destroy();
+
+      chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: `Damage total - ${player.playerName}`,
+            data,
+            backgroundColor: 'rgba(88, 101, 242, 0.8)'
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            title: {
+              display: true,
+              text: `Damage By Skill - ${player.playerName} vs ${player.bossName}`
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: '#ffffff' },
+              grid: { color: 'rgba(255,255,255,0.1)' }
+            },
+            y: {
+              ticks: { color: '#ffffff' },
+              grid: { color: 'rgba(255,255,255,0.1)' }
+            }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>
