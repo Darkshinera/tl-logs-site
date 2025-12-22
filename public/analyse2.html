@@ -104,7 +104,7 @@
       color: #9a9ac2;
     }
     .panel-body {
-      height: 420px;
+      height: 420px; /* valeur de base, sera écrasée pour Damage By Skill */
     }
 
     #chartContainer, #timelineContainer {
@@ -118,6 +118,7 @@
       width: 100% !important;
       height: 100% !important;
       max-height: none !important;
+      display: block;
     }
   </style>
 </head>
@@ -460,10 +461,9 @@
         : selectedPlayers.map(p => p.playerName).join(' vs ');
 
       /* --- hauteur dynamique du panel en fonction du nombre de skills --- */
-      const baseHeight = 260;      // hauteur pour ~10 skills
-      const perSkill = 20;         // +20px par skill au-dessus de 10
-      const extra = Math.max(0, labels.length - 10);
-      const newHeight = baseHeight + extra * perSkill;
+      const minHeight = 450;                 // hauteur mini
+      const perSkill = 30;                   // pixels par skill
+      const newHeight = Math.max(minHeight, labels.length * perSkill);
       const panelBody = document.getElementById('chartContainer');
       panelBody.style.height = newHeight + 'px';
       /* ------------------------------------------------------------------ */
@@ -474,7 +474,7 @@
         options: {
           indexAxis: 'y',
           responsive: true,
-          maintainAspectRatio: false,   /* respecte la hauteur CSS[web:327] */
+          maintainAspectRatio: false,  /* nécessaire pour respecter la hauteur CSS[web:327] */
           plugins: {
             legend: { display: true },
             title: { display: false }
