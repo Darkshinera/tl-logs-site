@@ -61,6 +61,7 @@
   <div id="status"></div>
 
   <h2>Player Statistics</h2>
+  <p>Clique sur un ou plusieurs joueurs pour les comparer sur le graphique.</p>
   <table>
     <thead>
       <tr>
@@ -68,6 +69,7 @@
         <th>Player Name</th>
         <th>DPS</th>
         <th>Total Damage</th>
+        <th>% Fight</th>
         <th>Hit Count</th>
         <th>Avg Hit</th>
         <th>Max Hit</th>
@@ -87,12 +89,14 @@
     const playerBody = document.getElementById('playerBody');
     let chart;
     let playersData = [];
+    let selectedPlayers = []; // tableau d’objets joueur
 
     fileInput.addEventListener('change', () => {
       const files = Array.from(fileInput.files);
       if (!files.length) return;
       statusEl.textContent = 'Lecture des fichiers...';
       playersData = [];
+      selectedPlayers = [];
       playerBody.innerHTML = '';
       if (chart) chart.destroy();
 
@@ -106,7 +110,11 @@
           playersData.sort((a, b) => b.dps - a.dps);
           renderPlayerTable(playersData);
           statusEl.textContent = `Logs analysés : ${playersData.length}`;
-          drawSkillChart(playersData[0]);
+
+          // par défaut, sélectionner le meilleur joueur
+          selectedPlayers = [playersData[0]];
+          highlightSelectedRows();
+          drawComparisonChart();
         })
         .catch(err => {
           statusEl.textContent = 'Erreur : ' + err;
@@ -215,59 +223,124 @@
 
     function renderPlayerTable(players) {
       playerBody.innerHTML = '';
+
+      // total de dégâts de tous les joueurs (pour calcul du %)
+      const totalFightDamage = players.reduce((sum, p) => sum + p.totalDamage, 0);
+
       players.forEach((p, idx) => {
         const tr = document.createElement('tr');
+        tr.dataset.index = p.index;
+
+        const percent =
+          totalFightDamage > 0
+            ? (p.totalDamage / totalFightDamage) * 100
+            : 0;
+
         tr.innerHTML = `
           <td>${idx + 1}</td>
           <td>${p.playerName}</td>
           <td>${p.dps.toLocaleString('fr-FR')}</td>
           <td>${p.totalDamage.toLocaleString('fr-FR')}</td>
+          <td>${percent.toFixed(2)}%</td>
           <td>${p.hitCount.toLocaleString('fr-FR')}</td>
           <td>${p.avgHit.toLocaleString('fr-FR')}</td>
           <td>${p.maxHit.toLocaleString('fr-FR')}</td>
           <td>${p.duration}s</td>
         `;
         tr.addEventListener('click', () => {
-          document
-            .querySelectorAll('#playerBody tr')
-            .forEach(row => row.classList.remove('player-selected'));
-          tr.classList.add('player-selected');
-          drawSkillChart(p);
+          onPlayerRowClick(p);
         });
-        if (idx === 0) tr.classList.add('player-selected');
         playerBody.appendChild(tr);
       });
     }
 
-    function drawSkillChart(player) {
-      const entries = Object.entries(player.damageBySkill);
-      entries.sort((a, b) => b[1] - a[1]);
+    function onPlayerRowClick(player) {
+      const exists = selectedPlayers.find(p => p.index === player.index);
+      if (exists) {
+        selectedPlayers = selectedPlayers.filter(p => p.index !== player.index);
+      } else {
+        selectedPlayers.push(player); // aucune limite
+      }
+      highlightSelectedRows();
+      drawComparisonChart();
+    }
 
-      const labels = entries.map(e => e[0]);
-      const data = entries.map(e => e[1]);
+    function highlightSelectedRows() {
+      const rows = playerBody.querySelectorAll('tr');
+      rows.forEach(row => {
+        const idx = parseInt(row.dataset.index, 10);
+        const isSelected = selectedPlayers.some(p => p.index === idx);
+        row.classList.toggle('player-selected', isSelected);
+      });
+    }
 
+    function drawComparisonChart() {
       const ctx = document.getElementById('damageChart').getContext('2d');
       if (chart) chart.destroy();
 
+      if (!selectedPlayers.length) return;
+
+      // 1) total des dégâts par skill (tous joueurs sélectionnés)
+      const skillTotals = {};
+      selectedPlayers.forEach(p => {
+        Object.entries(p.damageBySkill).forEach(([skill, dmg]) => {
+          if (!skillTotals[skill]) skillTotals[skill] = 0;
+          skillTotals[skill] += dmg;
+        });
+      });
+
+      // 2) skills triés par dégâts décroissants
+      const labels = Object.entries(skillTotals)
+        .sort((a, b) => b[1] - a[1])
+        .map(e => e[0]);
+
+      // 3) couleurs pour les joueurs
+      const colors = [
+        'rgba(88, 101, 242, 0.8)',
+        'rgba(46, 204, 113, 0.8)',
+        'rgba(231, 76, 60, 0.8)',
+        'rgba(241, 196, 15, 0.8)',
+        'rgba(155, 89, 182, 0.8)',
+        'rgba(26, 188, 156, 0.8)',
+        'rgba(230, 126, 34, 0.8)',
+        'rgba(149, 165, 166, 0.8)'
+      ];
+      const borderColors = [
+        'rgba(88, 101, 242, 1)',
+        'rgba(46, 204, 113, 1)',
+        'rgba(231, 76, 60, 1)',
+        'rgba(241, 196, 15, 1)',
+        'rgba(155, 89, 182, 1)',
+        'rgba(26, 188, 156, 1)',
+        'rgba(230, 126, 34, 1)',
+        'rgba(149, 165, 166, 1)'
+      ];
+
+      const datasets = selectedPlayers.map((p, idx) => {
+        const data = labels.map(skill => p.damageBySkill[skill] || 0);
+        return {
+          label: p.playerName,
+          data,
+          backgroundColor: colors[idx % colors.length],
+          borderColor: borderColors[idx % borderColors.length],
+          borderWidth: 1
+        };
+      });
+
       chart = new Chart(ctx, {
         type: 'bar',
-        data: {
-          labels,
-          datasets: [{
-            label: `Damage total - ${player.playerName}`,
-            data,
-            backgroundColor: 'rgba(88, 101, 242, 0.8)'
-          }]
-        },
+        data: { labels, datasets },
         options: {
           indexAxis: 'y',
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
-            legend: { display: false },
+            legend: { display: true },
             title: {
               display: true,
-              text: `Damage By Skill - ${player.playerName} vs ${player.bossName}`
+              text: selectedPlayers.length === 1
+                ? `Damage By Skill - ${selectedPlayers[0].playerName}`
+                : `Comparaison Damage By Skill : ${selectedPlayers.map(p => p.playerName).join(' vs ')}`
             }
           },
           scales: {
