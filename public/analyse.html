@@ -56,9 +56,31 @@
       text-overflow: ellipsis;
     }
 
-    /* Tableau joueurs */
+    /* Boutons de vue */
+    .view-switch {
+      margin-top: 20px;
+      width: 95%;
+      max-width: 1600px;
+      display: flex;
+      gap: 8px;
+    }
+    .view-switch button {
+      padding: 6px 12px;
+      border-radius: 4px;
+      border: 1px solid #333;
+      background: #1b1c22;
+      color: #fff;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .view-switch button.active {
+      background: #5a3af0;
+      border-color: #7d5bff;
+    }
+
+    /* Tableau générique */
     table {
-      margin-top: 25px;
+      margin-top: 12px;
       border-collapse: collapse;
       width: 95%;
       max-width: 1600px;
@@ -79,6 +101,7 @@
     }
     tr.player-selected { background-color: #3a2525; }
     td:nth-child(2) { text-align: left; }
+    td:first-child { text-align: left; }
 
     /* Panneaux pour les graphes */
     .panel {
@@ -107,7 +130,7 @@
       color: #9a9ac2;
     }
     .panel-body {
-      height: 420px; /* valeur de base, modifiée dynamiquement pour Damage By Skill */
+      height: 420px;
     }
 
     #chartContainer, #timelineContainer, #avgTimelineContainer {
@@ -152,9 +175,14 @@
     </div>
   </div>
 
-  <h2>Player Statistics</h2>
-  <p>Clique sur un ou plusieurs joueurs pour les comparer sur les graphiques.</p>
-  <table>
+  <!-- Switch Skills / Targets -->
+  <div class="view-switch">
+    <button id="viewSkillsBtn" class="active">Players</button>
+    <button id="viewTargetsBtn">Targets</button>
+  </div>
+
+  <!-- Table Players -->
+  <table id="playersTable">
     <thead>
       <tr>
         <th>#</th>
@@ -171,7 +199,19 @@
     <tbody id="playerBody"></tbody>
   </table>
 
-  <!-- Panel Damage By Skill en premier -->
+  <!-- Table Targets -->
+  <table id="targetsTable" style="display:none;">
+    <thead>
+      <tr>
+        <th>Target</th>
+        <th>Total Damage</th>
+        <th>Hits</th>
+      </tr>
+    </thead>
+    <tbody id="targetsBody"></tbody>
+  </table>
+
+  <!-- Panel Damage By Skill -->
   <div class="panel">
     <div class="panel-header">
       <span class="panel-title">Damage By Skill</span>
@@ -182,7 +222,7 @@
     </div>
   </div>
 
-  <!-- Panel DPS moyen -->
+  <!-- Panel Average DPS -->
   <div class="panel">
     <div class="panel-header">
       <span class="panel-title">Average DPS Over Time</span>
@@ -193,7 +233,7 @@
     </div>
   </div>
 
-  <!-- Panel DPS Timeline instantané -->
+  <!-- Panel DPS Timeline -->
   <div class="panel">
     <div class="panel-header">
       <span class="panel-title">DPS Timeline (Per Second)</span>
@@ -208,11 +248,32 @@
     const fileInput = document.getElementById('logFile');
     const statusEl = document.getElementById('status');
     const playerBody = document.getElementById('playerBody');
+    const targetsBody = document.getElementById('targetsBody');
+    const playersTable = document.getElementById('playersTable');
+    const targetsTable = document.getElementById('targetsTable');
+    const viewSkillsBtn = document.getElementById('viewSkillsBtn');
+    const viewTargetsBtn = document.getElementById('viewTargetsBtn');
+
     let chart;
     let dpsTimelineChart;
     let avgDpsTimelineChart;
     let playersData = [];
     let selectedPlayers = [];
+
+    viewSkillsBtn.onclick = () => {
+      viewSkillsBtn.classList.add('active');
+      viewTargetsBtn.classList.remove('active');
+      playersTable.style.display = '';
+      targetsTable.style.display = 'none';
+    };
+
+    viewTargetsBtn.onclick = () => {
+      viewTargetsBtn.classList.add('active');
+      viewSkillsBtn.classList.remove('active');
+      playersTable.style.display = 'none';
+      targetsTable.style.display = '';
+      renderTargetsTable();
+    };
 
     fileInput.addEventListener('change', () => {
       const files = Array.from(fileInput.files);
@@ -221,6 +282,7 @@
       playersData = [];
       selectedPlayers = [];
       playerBody.innerHTML = '';
+      targetsBody.innerHTML = '';
       if (chart) chart.destroy();
       if (dpsTimelineChart) dpsTimelineChart.destroy();
       if (avgDpsTimelineChart) avgDpsTimelineChart.destroy();
@@ -234,7 +296,6 @@
           }
           playersData.sort((a, b) => b.dps - a.dps);
 
-          // Cible commune (boss)
           const bossName =
             playersData[0].bossName && playersData[0].bossName !== 'Unknown'
               ? playersData[0].bossName
@@ -273,6 +334,8 @@
 
             const damageBySkill = {};
             const damageTimeline = {};
+            const damageByTarget = {}; // cible -> { totalDamage, hits }
+
             let totalDamage = 0;
             let hitCount = 0;
             let maxHit = 0;
@@ -304,6 +367,12 @@
                 if (!damageBySkill[skillName]) damageBySkill[skillName] = 0;
                 damageBySkill[skillName] += dmg;
 
+                if (!damageByTarget[boss]) {
+                  damageByTarget[boss] = { totalDamage: 0, hits: 0 };
+                }
+                damageByTarget[boss].totalDamage += dmg;
+                damageByTarget[boss].hits += 1;
+
                 if (!firstTs) firstTs = ts;
                 const secFromStart = computeSecondsDiff(firstTs, ts);
                 if (!damageTimeline[secFromStart]) damageTimeline[secFromStart] = 0;
@@ -325,7 +394,6 @@
             const dps = duration > 0 ? Math.round(totalDamage / duration) : totalDamage;
             const avgHit = Math.round(totalDamage / hitCount);
 
-            // calcul du DPS moyen dans le temps
             const avgDpsTimeline = {};
             let cumulative = 0;
             for (let s = 0; s <= duration; s++) {
@@ -346,7 +414,8 @@
               dps,
               damageBySkill,
               damageTimeline,
-              avgDpsTimeline
+              avgDpsTimeline,
+              damageByTarget
             });
           } catch {
             resolve(null);
@@ -377,7 +446,7 @@
 
     function computeSecondsDiff(tsStart, tsCurrent) {
       const parse = (ts) => {
-        const [datePart, timePart] = ts.split('-');
+        const [datePart, timePart] = ts.split('-);
         const year = parseInt(datePart.slice(0,4), 10);
         const month = parseInt(datePart.slice(4,6), 10) - 1;
         const day = parseInt(datePart.slice(6,8), 10);
@@ -417,6 +486,35 @@
         if (idx === 0) tr.style.borderLeft = '3px solid #ff4d6a';
         tr.addEventListener('click', () => onPlayerRowClick(p));
         playerBody.appendChild(tr);
+      });
+    }
+
+    function renderTargetsTable() {
+      targetsBody.innerHTML = '';
+      const targetTotals = {};
+
+      playersData.forEach(p => {
+        if (!p.damageByTarget) return;
+        Object.entries(p.damageByTarget).forEach(([target, info]) => {
+          if (!targetTotals[target]) {
+            targetTotals[target] = { totalDamage: 0, hits: 0 };
+          }
+          targetTotals[target].totalDamage += info.totalDamage;
+          targetTotals[target].hits += info.hits;
+        });
+      });
+
+      const sortedTargets = Object.entries(targetTotals)
+        .sort((a, b) => b[1].totalDamage - a[1].totalDamage);
+
+      sortedTargets.forEach(([target, info]) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${target}</td>
+          <td>${info.totalDamage.toLocaleString('fr-FR')}</td>
+          <td>${info.hits.toLocaleString('fr-FR')}</td>
+        `;
+        targetsBody.appendChild(tr);
       });
     }
 
@@ -500,9 +598,8 @@
         ? selectedPlayers[0].playerName
         : selectedPlayers.map(p => p.playerName).join(' vs ');
 
-      // hauteur dynamique en fonction du nombre de skills
       const minHeight = 450;
-      const perSkill = 40;   // lignes plus hautes (barres plus visibles)
+      const perSkill = 40;
       const newHeight = Math.max(minHeight, labels.length * perSkill);
       const panelBody = document.getElementById('chartContainer');
       panelBody.style.height = newHeight + 'px';
@@ -514,11 +611,8 @@
           indexAxis: 'y',
           responsive: true,
           maintainAspectRatio: false,
-
-          // barres épaisses mais sans chevauchement
           categoryPercentage: 0.9,
           barPercentage: 0.7,
-
           plugins: {
             legend: { display: true },
             title: { display: false }
