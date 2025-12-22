@@ -107,7 +107,7 @@
       color: #9a9ac2;
     }
     .panel-body {
-      height: 420px; /* valeur de base, modifiée dynamiquement pour Damage By Skill */
+      height: 420px;
     }
 
     #chartContainer, #timelineContainer, #avgTimelineContainer {
@@ -123,6 +123,26 @@
       height: 100% !important;
       max-height: none !important;
       display: block;
+    }
+
+    /* Filtre cible */
+    .filters {
+      width: 95%;
+      max-width: 1600px;
+      margin-top: 10px;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #c0c0dd;
+    }
+    .filters select {
+      background: #151518;
+      color: #fff;
+      border-radius: 4px;
+      border: 1px solid #33344a;
+      padding: 4px 8px;
     }
   </style>
 </head>
@@ -152,6 +172,14 @@
     </div>
   </div>
 
+  <!-- Filtres -->
+  <div class="filters">
+    <label for="targetFilter">Cible :</label>
+    <select id="targetFilter">
+      <option value="ALL">Toutes les cibles</option>
+    </select>
+  </div>
+
   <h2>Player Statistics</h2>
   <p>Clique sur un ou plusieurs joueurs pour les comparer sur les graphiques.</p>
   <table>
@@ -171,7 +199,7 @@
     <tbody id="playerBody"></tbody>
   </table>
 
-  <!-- Panel Damage By Skill en premier -->
+  <!-- Panel Damage By Skill -->
   <div class="panel">
     <div class="panel-header">
       <span class="panel-title">Damage By Skill</span>
@@ -182,7 +210,7 @@
     </div>
   </div>
 
-  <!-- Panel DPS moyen -->
+  <!-- Panel Average DPS Over Time -->
   <div class="panel">
     <div class="panel-header">
       <span class="panel-title">Average DPS Over Time</span>
@@ -193,7 +221,7 @@
     </div>
   </div>
 
-  <!-- Panel DPS Timeline instantané -->
+  <!-- Panel DPS Timeline -->
   <div class="panel">
     <div class="panel-header">
       <span class="panel-title">DPS Timeline (Per Second)</span>
@@ -208,6 +236,8 @@
     const fileInput = document.getElementById('logFile');
     const statusEl = document.getElementById('status');
     const playerBody = document.getElementById('playerBody');
+    const targetSelect = document.getElementById('targetFilter');
+
     let chart;
     let dpsTimelineChart;
     let avgDpsTimelineChart;
@@ -234,7 +264,7 @@
           }
           playersData.sort((a, b) => b.dps - a.dps);
 
-          // Cible commune (boss)
+          // Cible "principale"
           const bossName =
             playersData[0].bossName && playersData[0].bossName !== 'Unknown'
               ? playersData[0].bossName
@@ -252,6 +282,9 @@
           renderPlayerTable(playersData);
           statusEl.textContent = `Logs analysés : ${playersData.length}`;
 
+          // Remplir la liste des cibles
+          fillTargetFilter(playersData);
+
           selectedPlayers = [playersData[0]];
           highlightSelectedRows();
           drawComparisonChart();
@@ -263,6 +296,24 @@
         });
     });
 
+    targetSelect.addEventListener('change', () => {
+      drawComparisonChart();
+    });
+
+    function fillTargetFilter(players) {
+      const allTargets = new Set();
+      players.forEach(p => {
+        Object.keys(p.damageByTarget).forEach(t => allTargets.add(t));
+      });
+      targetSelect.innerHTML = '<option value="ALL">Toutes les cibles</option>';
+      Array.from(allTargets).sort().forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t;
+        targetSelect.appendChild(opt);
+      });
+    }
+
     function parseLogFile(file, index) {
       return new Promise((resolve) => {
         const reader = new FileReader();
@@ -272,6 +323,7 @@
             const lines = text.split(/\r?\n/);
 
             const damageBySkill = {};
+            const damageByTarget = {};          // cible -> skill -> damage
             const damageTimeline = {};
             let totalDamage = 0;
             let hitCount = 0;
@@ -294,15 +346,21 @@
               const dmgStr = parts[4].trim().replace(/\s/g, '');
               const dmg = parseInt(dmgStr, 10);
               const player = parts[parts.length - 2].trim();
-              const boss = parts[parts.length - 1].trim();
+              const target = parts[parts.length - 1].trim();
 
               if (!isNaN(dmg) && dmg > 0) {
                 totalDamage += dmg;
                 hitCount += 1;
                 if (dmg > maxHit) maxHit = dmg;
 
+                // dégâts par skill (toutes cibles)
                 if (!damageBySkill[skillName]) damageBySkill[skillName] = 0;
                 damageBySkill[skillName] += dmg;
+
+                // dégâts par cible et skill
+                if (!damageByTarget[target]) damageByTarget[target] = {};
+                if (!damageByTarget[target][skillName]) damageByTarget[target][skillName] = 0;
+                damageByTarget[target][skillName] += dmg;
 
                 if (!firstTs) firstTs = ts;
                 const secFromStart = computeSecondsDiff(firstTs, ts);
@@ -313,7 +371,7 @@
               if (!firstTs) firstTs = ts;
               lastTs = ts;
               playerName = player;
-              bossName = boss;
+              bossName = target; // dernière cible frappée
             }
 
             if (hitCount === 0 || !firstTs || !lastTs) {
@@ -325,7 +383,7 @@
             const dps = duration > 0 ? Math.round(totalDamage / duration) : totalDamage;
             const avgHit = Math.round(totalDamage / hitCount);
 
-            // calcul du DPS moyen dans le temps
+            // DPS moyen dans le temps
             const avgDpsTimeline = {};
             let cumulative = 0;
             for (let s = 0; s <= duration; s++) {
@@ -345,6 +403,7 @@
               duration,
               dps,
               damageBySkill,
+              damageByTarget,
               damageTimeline,
               avgDpsTimeline
             });
@@ -446,6 +505,7 @@
       const ctx = document.getElementById('damageChart').getContext('2d');
       if (chart) chart.destroy();
       const playersMeta = document.getElementById('playersMeta');
+      const selectedTarget = targetSelect.value || 'ALL';
 
       if (!selectedPlayers.length) {
         playersMeta.textContent = '';
@@ -454,7 +514,11 @@
 
       const skillTotals = {};
       selectedPlayers.forEach(p => {
-        Object.entries(p.damageBySkill).forEach(([skill, dmg]) => {
+        const source =
+          selectedTarget === 'ALL'
+            ? p.damageBySkill
+            : (p.damageByTarget[selectedTarget] || {});
+        Object.entries(source).forEach(([skill, dmg]) => {
           if (!skillTotals[skill]) skillTotals[skill] = 0;
           skillTotals[skill] += dmg;
         });
@@ -486,7 +550,11 @@
       ];
 
       const datasets = selectedPlayers.map((p, idx) => {
-        const data = labels.map(skill => p.damageBySkill[skill] || 0);
+        const src =
+          selectedTarget === 'ALL'
+            ? p.damageBySkill
+            : (p.damageByTarget[selectedTarget] || {});
+        const data = labels.map(skill => src[skill] || 0);
         return {
           label: p.playerName,
           data,
@@ -496,11 +564,10 @@
         };
       });
 
-      playersMeta.textContent = selectedPlayers.length === 1
-        ? selectedPlayers[0].playerName
-        : selectedPlayers.map(p => p.playerName).join(' vs ');
+      playersMeta.textContent =
+        selectedPlayers.map(p => p.playerName).join(' vs ') +
+        (selectedTarget !== 'ALL' ? ` – cible: ${selectedTarget}` : '');
 
-      // hauteur dynamique en fonction du nombre de skills
       const minHeight = 450;
       const perSkill = 30;
       const newHeight = Math.max(minHeight, labels.length * perSkill);
@@ -605,7 +672,7 @@
       });
     }
 
-    function drawDpsTimeline() {
+        function drawDpsTimeline() {
       const ctx = document.getElementById('dpsTimeline').getContext('2d');
       if (dpsTimelineChart) dpsTimelineChart.destroy();
       const fightMeta = document.getElementById('fightDurationMeta');
