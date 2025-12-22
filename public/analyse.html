@@ -423,22 +423,22 @@
     }
 
     function computeSecondsDiff(tsStart, tsCurrent) {
-      const parse = (ts) => {
-        const [datePart, timePart] = ts.split('-');
-        const year = parseInt(datePart.slice(0,4), 10);
-        const month = parseInt(datePart.slice(4,6), 10) - 1;
-        the day = parseInt(datePart.slice(6,8), 10);
-        const [h, m, s, ms] = timePart.split(':').map(x => parseInt(x, 10));
-        return new Date(year, month, day, h, m, s, ms);
-      };
-      try {
-        const d1 = parse(tsStart);
-        const d2 = parse(tsCurrent);
-        return Math.max(0, Math.floor((d2 - d1) / 1000));
-      } catch {
-        return 0;
-      }
-    }
+  const parse = (ts) => {
+    const [datePart, timePart] = ts.split('-');
+    const year = parseInt(datePart.slice(0,4), 10);
+    const month = parseInt(datePart.slice(4,6), 10) - 1;
+    const day = parseInt(datePart.slice(6,8), 10);
+    const [h, m, s, ms] = timePart.split(':').map(x => parseInt(x, 10));
+    return new Date(year, month, day, h, m, s, ms);
+  };
+  try {
+    const d1 = parse(tsStart);
+    const d2 = parse(tsCurrent);
+    return Math.max(0, Math.floor((d2 - d1) / 1000));
+  } catch {
+    return 0;
+  }
+}
 
     function renderPlayerTable(players) {
       playerBody.innerHTML = '';
