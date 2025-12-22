@@ -234,6 +234,7 @@
           }
           playersData.sort((a, b) => b.dps - a.dps);
 
+          // Cible commune (boss)
           const bossName =
             playersData[0].bossName && playersData[0].bossName !== 'Unknown'
               ? playersData[0].bossName
@@ -324,6 +325,7 @@
             const dps = duration > 0 ? Math.round(totalDamage / duration) : totalDamage;
             const avgHit = Math.round(totalDamage / hitCount);
 
+            // calcul du DPS moyen dans le temps
             const avgDpsTimeline = {};
             let cumulative = 0;
             for (let s = 0; s <= duration; s++) {
@@ -498,8 +500,9 @@
         ? selectedPlayers[0].playerName
         : selectedPlayers.map(p => p.playerName).join(' vs ');
 
+      // hauteur dynamique en fonction du nombre de skills
       const minHeight = 450;
-      const perSkill = 30;
+      const perSkill = 40;   // lignes plus hautes pour des barres visuellement “doublées”
       const newHeight = Math.max(minHeight, labels.length * perSkill);
       const panelBody = document.getElementById('chartContainer');
       panelBody.style.height = newHeight + 'px';
@@ -512,8 +515,8 @@
           responsive: true,
           maintainAspectRatio: false,
 
-          /* plus d'espace entre les barres / catégories */
-          categoryPercentage: 0.5,
+          // barres épaisses sans chevauchement
+          categoryPercentage: 0.9,
           barPercentage: 0.7,
 
           plugins: {
