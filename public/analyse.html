@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>Damage By Skill - Throne and Liberty</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script> <!-- zoom/drag [web:455] -->
   <style>
     body {
       margin: 0;
@@ -121,6 +122,25 @@
       max-height: none !important;
       display: block;
     }
+
+    #avgControls {
+      width: 95%;
+      max-width: 1600px;
+      margin-top: 6px;
+      text-align: right;
+      font-size: 12px;
+      color: #aaa;
+    }
+    #avgControls button {
+      padding: 3px 8px;
+      font-size: 12px;
+      border-radius: 4px;
+      border: 1px solid #333;
+      background: #1b1c22;
+      color: #fff;
+      cursor: pointer;
+      margin-left: 6px;
+    }
   </style>
 </head>
 <body>
@@ -205,6 +225,10 @@
       <canvas id="avgDpsTimeline"></canvas>
     </div>
   </div>
+  <div id="avgControls">
+    (Click and drag to zoom)
+    <button id="resetAvgZoomBtn">Reset zoom</button>
+  </div>
 
   <div class="panel">
     <div class="panel-header">
@@ -223,13 +247,15 @@
     const targetsTable = document.getElementById('targetsTable');
     const targetsBody  = document.getElementById('targetsBody');
     const toggleTargetsBtn = document.getElementById('toggleTargetsBtn');
+    const resetAvgZoomBtn = document.getElementById('resetAvgZoomBtn');
 
     let chart;
     let dpsTimelineChart;
     let avgDpsTimelineChart;
     let playersData = [];
     let selectedPlayers = [];
-    let selectedTarget = null; // null = toutes cibles
+    let selectedTarget = null;      // null = toutes cibles
+    let globalBossPhases = [];      // phases fusionnées pour la timeline moyenne
 
     toggleTargetsBtn.addEventListener('click', () => {
       const currentDisplay = window.getComputedStyle(targetsTable).display;
@@ -244,6 +270,10 @@
       }
     });
 
+    resetAvgZoomBtn.addEventListener('click', () => {
+      if (avgDpsTimelineChart) avgDpsTimelineChart.resetZoom();
+    });
+
     fileInput.addEventListener('change', () => {
       const files = Array.from(fileInput.files);
       if (!files.length) return;
@@ -251,6 +281,7 @@
       playersData = [];
       selectedPlayers = [];
       selectedTarget = null;
+      globalBossPhases = [];
       playerBody.innerHTML = '';
       targetsBody.innerHTML = '';
       targetsTable.style.display = 'none';
@@ -288,6 +319,10 @@
 
           selectedPlayers = [playersData[0]];
           highlightSelectedRows();
+
+          // phases de boss globales basées sur le premier joueur
+          globalBossPhases = playersData[0].bossPhases || [];
+
           drawComparisonChart();
           drawAvgDpsTimeline();
           drawDpsTimeline();
@@ -308,6 +343,7 @@
             const damageBySkill = {};
             const damageTimeline = {};
             const damageByTarget = {}; // cible -> { totalDamage, hits, bySkill }
+            const bossPhases = [];
 
             let totalDamage = 0;
             let hitCount = 0;
@@ -316,6 +352,8 @@
             let lastTs = null;
             let playerName = 'Unknown';
             let bossName = 'Unknown';
+            let currentBoss = null;
+            let currentBossStartSec = 0;
 
             for (const line of lines) {
               if (!line) continue;
@@ -331,6 +369,22 @@
               const dmg = parseInt(dmgStr, 10);
               const player = parts[parts.length - 2].trim();
               const boss = parts[parts.length - 1].trim();
+
+              if (!firstTs) firstTs = ts;
+              const secFromStart = computeSecondsDiff(firstTs, ts);
+
+              // détection de changement de boss -> phase
+              if (boss !== currentBoss) {
+                if (currentBoss !== null) {
+                  bossPhases.push({
+                    name: currentBoss,
+                    startSec: currentBossStartSec,
+                    endSec: secFromStart
+                  });
+                }
+                currentBoss = boss;
+                currentBossStartSec = secFromStart;
+              }
 
               if (!isNaN(dmg) && dmg > 0) {
                 totalDamage += dmg;
@@ -350,13 +404,10 @@
                 }
                 damageByTarget[boss].bySkill[skillName] += dmg;
 
-                if (!firstTs) firstTs = ts;
-                const secFromStart = computeSecondsDiff(firstTs, ts);
                 if (!damageTimeline[secFromStart]) damageTimeline[secFromStart] = 0;
                 damageTimeline[secFromStart] += dmg;
               }
 
-              if (!firstTs) firstTs = ts;
               lastTs = ts;
               playerName = player;
               bossName = boss;
@@ -365,6 +416,16 @@
             if (hitCount === 0 || !firstTs || !lastTs) {
               resolve(null);
               return;
+            }
+
+            // fermer la dernière phase
+            const lastSec = computeSecondsDiff(firstTs, lastTs);
+            if (currentBoss !== null) {
+              bossPhases.push({
+                name: currentBoss,
+                startSec: currentBossStartSec,
+                endSec: lastSec
+              });
             }
 
             const duration = computeDurationSeconds(firstTs, lastTs);
@@ -392,7 +453,8 @@
               damageBySkill,
               damageTimeline,
               avgDpsTimeline,
-              damageByTarget
+              damageByTarget,
+              bossPhases
             });
           } catch {
             resolve(null);
@@ -468,7 +530,7 @@
 
     function renderTargetsTable() {
       targetsBody.innerHTML = '';
-      const targetTotals = {}; // { target: { totalDamage, hits } }
+      const targetTotals = {};
 
       playersData.forEach(p => {
         if (!p.damageByTarget) return;
@@ -685,13 +747,27 @@
           maintainAspectRatio: false,
           plugins: {
             legend: { display: true },
-            title: { display: false },
+            title: {
+              display: true,
+              text: 'Average DPS Over Time (Click and drag to zoom)'
+            },
             tooltip: {
               callbacks: {
                 label: (ctx) => {
                   const v = ctx.parsed.y || 0;
                   return `${ctx.dataset.label}: ${Math.round(v).toLocaleString('fr-FR')} DPS moyen`;
                 }
+              }
+            },
+            zoom: {
+              zoom: {
+                wheel: { enabled: true },
+                drag: { enabled: true },
+                mode: 'x'
+              },
+              pan: {
+                enabled: true,
+                mode: 'x'
               }
             }
           },
@@ -705,7 +781,38 @@
               grid: { color: 'rgba(255,255,255,0.08)' }
             }
           }
-        }
+        },
+        plugins: [{
+          id: 'bossBackgrounds',
+          beforeDraw(chart) {
+            const { ctx, chartArea, scales: { x } } = chart;
+            if (!globalBossPhases || !globalBossPhases.length) return;
+
+            const colors = [
+              'rgba(80, 40, 120, 0.35)',
+              'rgba(160, 120, 40, 0.35)',
+              'rgba(20, 80, 120, 0.35)',
+              'rgba(80, 120, 40, 0.35)'
+            ];
+
+            globalBossPhases.forEach((phase, idx) => {
+              const xStart = x.getPixelForValue(phase.startSec);
+              const xEnd   = x.getPixelForValue(phase.endSec);
+              ctx.save();
+              ctx.fillStyle = colors[idx % colors.length];
+              ctx.fillRect(xStart, chartArea.top, xEnd - xStart, chartArea.bottom - chartArea.top);
+              ctx.fillStyle = '#ffffff';
+              ctx.font = '10px Arial';
+              ctx.textAlign = 'center';
+              ctx.fillText(
+                phase.name,
+                (xStart + xEnd) / 2,
+                chartArea.top + 12
+              );
+              ctx.restore();
+            });
+          }
+        }]
       });
     }
 
