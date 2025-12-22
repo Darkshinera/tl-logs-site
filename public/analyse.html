@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Analyse log TL - Damage by Skill</title>
+  <title>Damage By Skill - Throne and Liberty</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
@@ -51,6 +51,9 @@
       font-size: 18px;
       font-weight: 700;
       color: #ff4d6a;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     /* Tableau joueurs */
@@ -104,7 +107,7 @@
       color: #9a9ac2;
     }
     .panel-body {
-      height: 420px; /* valeur de base, sera écrasée pour Damage By Skill */
+      height: 420px; /* valeur de base, modifiée dynamiquement pour Damage By Skill */
     }
 
     #chartContainer, #timelineContainer {
@@ -112,7 +115,7 @@
       height: 100%;
     }
 
-    /* Canvases : prennent toute la hauteur du parent */
+    /* Canvases */
     #dpsTimeline,
     #damageChart {
       width: 100% !important;
@@ -142,6 +145,10 @@
       <div class="card-title">Players</div>
       <div class="card-value" id="sumPlayers">0</div>
     </div>
+    <div class="card">
+      <div class="card-title">Target</div>
+      <div class="card-value" id="sumBossName">---</div>
+    </div>
   </div>
 
   <h2>Player Statistics</h2>
@@ -163,7 +170,7 @@
     <tbody id="playerBody"></tbody>
   </table>
 
-  <!-- Panel Damage By Skill (maintenant en premier) -->
+  <!-- Panel Damage By Skill en premier -->
   <div class="panel">
     <div class="panel-header">
       <span class="panel-title">Damage By Skill</span>
@@ -174,7 +181,7 @@
     </div>
   </div>
 
-  <!-- Panel DPS Timeline (en dessous) -->
+  <!-- Panel DPS Timeline en dessous -->
   <div class="panel">
     <div class="panel-header">
       <span class="panel-title">DPS Timeline</span>
@@ -212,6 +219,13 @@
             return;
           }
           playersData.sort((a, b) => b.dps - a.dps);
+
+          // Cible commune (boss)
+          const bossName =
+            playersData[0].bossName && playersData[0].bossName !== 'Unknown'
+              ? playersData[0].bossName
+              : 'Unknown target';
+          document.getElementById('sumBossName').textContent = bossName;
 
           const totalFightDamage = playersData.reduce((s, p) => s + p.totalDamage, 0);
           const avgDps = playersData.reduce((s, p) => s + p.dps, 0) / playersData.length;
@@ -460,13 +474,12 @@
         ? selectedPlayers[0].playerName
         : selectedPlayers.map(p => p.playerName).join(' vs ');
 
-      /* --- hauteur dynamique du panel en fonction du nombre de skills --- */
-      const minHeight = 450;                 // hauteur mini
-      const perSkill = 30;                   // pixels par skill
+      // hauteur dynamique en fonction du nombre de skills
+      const minHeight = 450;
+      const perSkill = 30;
       const newHeight = Math.max(minHeight, labels.length * perSkill);
       const panelBody = document.getElementById('chartContainer');
       panelBody.style.height = newHeight + 'px';
-      /* ------------------------------------------------------------------ */
 
       chart = new Chart(ctx, {
         type: 'bar',
@@ -474,7 +487,7 @@
         options: {
           indexAxis: 'y',
           responsive: true,
-          maintainAspectRatio: false,  /* nécessaire pour respecter la hauteur CSS[web:327] */
+          maintainAspectRatio: false,
           plugins: {
             legend: { display: true },
             title: { display: false }
