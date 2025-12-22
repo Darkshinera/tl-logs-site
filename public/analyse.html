@@ -110,14 +110,15 @@
       height: 420px; /* valeur de base, modifiée dynamiquement pour Damage By Skill */
     }
 
-    #chartContainer, #timelineContainer {
+    #chartContainer, #timelineContainer, #avgTimelineContainer {
       width: 100%;
       height: 100%;
     }
 
     /* Canvases */
     #dpsTimeline,
-    #damageChart {
+    #damageChart,
+    #avgDpsTimeline {
       width: 100% !important;
       height: 100% !important;
       max-height: none !important;
@@ -181,10 +182,21 @@
     </div>
   </div>
 
-  <!-- Panel DPS Timeline en dessous -->
+  <!-- Panel DPS moyen -->
   <div class="panel">
     <div class="panel-header">
-      <span class="panel-title">DPS Timeline</span>
+      <span class="panel-title">Average DPS Over Time</span>
+      <span class="panel-meta" id="avgFightDurationMeta"></span>
+    </div>
+    <div class="panel-body" id="avgTimelineContainer">
+      <canvas id="avgDpsTimeline"></canvas>
+    </div>
+  </div>
+
+  <!-- Panel DPS Timeline instantané -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">DPS Timeline (Per Second)</span>
       <span class="panel-meta" id="fightDurationMeta"></span>
     </div>
     <div class="panel-body" id="timelineContainer">
@@ -198,6 +210,7 @@
     const playerBody = document.getElementById('playerBody');
     let chart;
     let dpsTimelineChart;
+    let avgDpsTimelineChart;
     let playersData = [];
     let selectedPlayers = [];
 
@@ -210,6 +223,7 @@
       playerBody.innerHTML = '';
       if (chart) chart.destroy();
       if (dpsTimelineChart) dpsTimelineChart.destroy();
+      if (avgDpsTimelineChart) avgDpsTimelineChart.destroy();
 
       Promise.all(files.map((f, index) => parseLogFile(f, index)))
         .then(results => {
@@ -241,6 +255,7 @@
           selectedPlayers = [playersData[0]];
           highlightSelectedRows();
           drawComparisonChart();
+          drawAvgDpsTimeline();
           drawDpsTimeline();
         })
         .catch(err => {
@@ -310,6 +325,15 @@
             const dps = duration > 0 ? Math.round(totalDamage / duration) : totalDamage;
             const avgHit = Math.round(totalDamage / hitCount);
 
+            // calcul du DPS moyen dans le temps
+            const avgDpsTimeline = {};
+            let cumulative = 0;
+            for (let s = 0; s <= duration; s++) {
+              const dmg = damageTimeline[s] || 0;
+              cumulative += dmg;
+              avgDpsTimeline[s] = cumulative / Math.max(1, s + 1);
+            }
+
             resolve({
               index,
               playerName,
@@ -321,7 +345,8 @@
               duration,
               dps,
               damageBySkill,
-              damageTimeline
+              damageTimeline,
+              avgDpsTimeline
             });
           } catch {
             resolve(null);
@@ -404,6 +429,7 @@
       }
       highlightSelectedRows();
       drawComparisonChart();
+      drawAvgDpsTimeline();
       drawDpsTimeline();
     }
 
@@ -500,6 +526,79 @@
             y: {
               ticks: { color: '#ffffff' },
               grid: { color: 'rgba(255,255,255,0.1)' }
+            }
+          }
+        }
+      });
+    }
+
+    function drawAvgDpsTimeline() {
+      const ctx = document.getElementById('avgDpsTimeline').getContext('2d');
+      if (avgDpsTimelineChart) avgDpsTimelineChart.destroy();
+      const fightMeta = document.getElementById('avgFightDurationMeta');
+      if (!selectedPlayers.length) {
+        fightMeta.textContent = '';
+        return;
+      }
+
+      const maxDuration = Math.max(...selectedPlayers.map(p => p.duration));
+      fightMeta.textContent = `${maxDuration}s`;
+
+      const labels = [];
+      for (let s = 0; s <= maxDuration; s++) labels.push(`${s}s`);
+
+      const colors = [
+        'rgba(255, 99, 132, 1)',
+        'rgba(54, 162, 235, 1)',
+        'rgba(75, 192, 192, 1)',
+        'rgba(255, 206, 86, 1)',
+        'rgba(153, 102, 255, 1)',
+        'rgba(255, 159, 64, 1)'
+      ];
+
+      const datasets = selectedPlayers.map((p, idx) => {
+        const data = [];
+        for (let s = 0; s <= maxDuration; s++) {
+          const v = p.avgDpsTimeline[s] || (s > p.duration ? p.dps : 0);
+          data.push(v);
+        }
+        return {
+          label: p.playerName,
+          data,
+          borderColor: colors[idx % colors.length],
+          backgroundColor: 'transparent',
+          pointRadius: 0,
+          borderWidth: 1.8,
+          tension: 0.15
+        };
+      });
+
+      avgDpsTimelineChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true },
+            title: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => {
+                  const v = ctx.parsed.y || 0;
+                  return `${ctx.dataset.label}: ${Math.round(v).toLocaleString('fr-FR')} DPS moyen`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: '#ffffff' },
+              grid: { color: 'rgba(255,255,255,0.08)' }
+            },
+            y: {
+              ticks: { color: '#ffffff' },
+              grid: { color: 'rgba(255,255,255,0.08)' }
             }
           }
         }
